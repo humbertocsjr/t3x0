@@ -1,0 +1,86 @@
+
+	2023-02-13
+
+	- Added the T.INTR86 procedure and T3X.REG86 structure to the
+	  DOS runtime module.
+	- Implemented T.TRUNC in FreeBSD runtime module.
+
+
+	2023-02-12
+
+	- Implemented T.TRUNC and T.BREAK in DOS runtime module.
+
+
+	2023-01-17
+
+	- Implemented T.TRUNC (truncate files) and T.BREAK (intercept
+	  keyboard break) in Unix runtime module.
+
+
+	2022-12-31
+
+	- Made -C (where C is a constant) a valid constant expression.
+
+
+	2022-12-10
+
+	- Added "-e external_module" option to TX0.
+	  Try "tx0 -e signal.c mu" in  programs/.
+
+
+	2022-12-06
+
+	- Renamed UNX386 backend FBD386 (FreeBSD-386).
+	- bin/build and bin/tx0 now use target 'fbsd' instead of 'unix'.
+	- Added more generic Unix-386 backend (UNX386).
+
+
+	2022-10-22
+
+	- Fix: f(p) miscompiled, if P is a procedure.
+	- Added shellsrt module
+
+
+	2022-10-18
+
+	- Unix-386 T.NEWLINE returned wrong sequence.
+	- Fixed some errors in the manual (t3x.txt).
+
+
+	Differences between T3Xr7 and T3X/0
+
+	Added string literals as abbreviations to packed vectors.
+
+	Changed module syntax:
+	MODULE name; declarations [compound] END
+	If a compound statement is present, it will execute when
+	the module is USEd for the first time, or at the beginning
+	of program execution, if the module declaration is not in
+	a separate file.
+
+	PUBLIC declarations in modules can be imported.
+
+	Changed module import syntax:
+	USE name;
+	USE name: alias;
+	USE name: name;
+	Will load module from sources, but only when not already
+	present. Using alias=name overrides internal module names.
+
+	Removed classes and objects.
+
+	Constant expressions limited to *, +, |.
+
+	Added EXTERN procedures for ports with source output:
+	EXTERN name(arity), ... ;
+
+	Added INLINE procedures for ports with binary output:
+	INLINE name(arity) = [ byte, ... ], ... ;
+
+	Jumps out of blocks allocating local storage (LEAVE, LOOP)
+	are safe. Storage will be deallocated before exiting.
+
+	Full T3X core library supported, including the functions BPW,
+	NEWLINE, GETARG, CREATE, SEEK, REMOVE, RENAME, as well as
+	OAPPND mode. (SEEK and OAPPND are not supported on CP/M.)
+

@@ -1,0 +1,338 @@
+
+	T3X/0 - A New T3X Compiler
+
+	T3X is a family of small, portable, procedural, block-structured,
+	recursive, and almost typeless programming languages. The T3X
+	syntax is similar to Pascal, its semantics resembles BCPL's.
+
+	T3X/0 is the latest member of the T3X family. Its design is
+	based on the experience made with its predecessors. It is
+	simpler than the full (Release 7) language, but more complete
+	than the minimalistic T3X9 branch.
+
+	The compiler presented here is a single-stage two-pass compiler
+	that is aimed to be ported quickly to new platforms, typically
+	by just writing a new machine description file. The compiler
+	can run on systems as minimal as CP/M on a Z80 CPU and easily
+	fits in a tiny model DOS executable. It self-compiles in ten
+	minutes on a 4MHz CP/M system (and in the blink of an eye on a
+	modern Unix system).
+
+
+	*** Currently Supported Platforms ***
+
+	Operating System   CPU    Output format       Requires
+	Generic Unix       VM     Tcode/0
+	Generic Unix       386    assembly language   C compiler
+	FreeBSD            386    assembly language   assembler, loader
+	CP/M 2.2           Z80    COM                 48K bytes TPA
+	PCDOS 2.0          8086   COM
+
+	The compiler can operate natively or as a cross-compiler. Almost
+	all combinations are supported: for example, you can cross-
+	compile on CP/M for the TCVM, on the TVCM for Unix, on Unix for
+	DOS, and on DOS for CP/M. Or on CP/M for DOS, etc. The only
+	combinations that are not possible are cross-compilation to
+	Unix on CP/M or DOS, because the source code emitter is too
+	large.
+
+	NOTE: when compilation is aborted and re-compilation fails,
+	this is usually due to the wrong code generator being linked
+	in place. In this case the following line should bring the
+	code back to a useful state:
+
+	   make clean; make reset; make
+
+
+	*** Quick Installation ***
+
+	If you just want to install T3X/0, edit the T3XDIR, BINDIR, and
+	HOST variables in Makefile and then run "make install". Use
+	HOST=unix, even on FreeBSD, unless you want the static code
+	backend (with does not support T.BREAK, though).
+
+	If you are not using a 386 processor (or a x86-64 processor with
+	32-bit compatibility support), you will have to use the bytecode
+	compiler. Just running "make" will build it.
+
+
+	*** Bootstrapping ***
+
+	On a Unix system, just run "make".
+
+	The T3X/0 archive contains a pre-compiled Tcode/0 executable of
+	the final T3X/0->Tcode/0 compiler as well as a bootstrapping
+	compiler in T3Xr7. So bootstrapping can be accomplished in two
+	ways:
+
+	(1) by using the pre-compiled binary BIN/TXTRN0.TC to
+	    self-compile.
+
+	    $ cc -m32 -o tcvm tcvm.c
+	    $ ./tcvm bin/txtrn0.tc txtrn
+
+	(2) or, by compiling the boostrapping compiler TXTRN0.T with
+	    T3Xr7 and then compiling the final compiler with that.
+
+	    $ tx txtrn0.t
+	    $ txx txtrn0 txtrn
+
+	In either case an existing C compiler is needed to compile
+	the Tcode/0 Virtual Machine (TCVM).
+
+	$ cc -o -m32 tcvm tcvm.c
+
+	The TCVM is a very basic C program with a length of less than
+	250 lines. It is a 32-bit program, though, and needs more than
+	64K bytes of data. You *might* get away with large model on DOS.
+	On 64-bit platforms it must be compiled in 32-bit mode (-m32).
+
+	There are also pre-compiled binaries for DOS and CP/M in the
+	BIN directory, in case you should want to bootstrap on such
+	a system. See below section for further details.
+
+
+	*** Testing ***
+
+	On a Unix system, just run "make test" and "make triple".
+
+	There is a simple test suite in PROGRAMS/TEST.T. The compiler
+	should at least pass these tests. To perform the tests, compile
+	the program and run it:
+
+	$ tcvm txtrn.tc programs/test test
+	$ tcvm test.tc
+
+	The output of the program should be self-explanatory.
+
+	Then you can also run the triple test. First re-compile the
+	compiler with itself:
+
+	$ tcvm txtrn.tc txtrn txtrn1
+
+	and then re-compile it again using the compiler generated in
+	the previous step:
+
+	$ tcvm txtrn1.tc txtrn txtrn2
+
+	There should not be any differences between the generated
+	compilers:
+
+	$ cmp txtrn1.tc txtrn2.tc
+
+
+	*** Usage ***
+
+	The (interpreted) T3X/0 compiler is invoked by using the command
+	line
+
+	tcvm txtrn.tc program
+
+	The compiler will then compile the file "program.t" and output
+	a TCVM binary named "program.tc". The compiled program can then
+	itself be run by the TCVM:
+
+	tcvm program.tc
+
+	When a second file name is passed to the compiler, it will
+	write the compiled program to that file.
+
+	tcvm program foo
+
+	will compile "program.t" to "foo.tc".
+
+	When the second parameter of the compiler is the string /v (or
+	/V), then it will compile to "program.tc" and in addition echo
+	the name of every function definition while compiling. This can
+	be entertaining on slow systems.
+
+	When a native code binary for a compiler exists, the compiler
+	can be invoked by just typing "txtrn" instead of "tcvm txtrn.tc".
+
+	Some compilers generate assembly language output, which needs
+	to be further compiled and linked. The compiler driver script
+	BIN/TX0.SH takes care of this. The details are outlined below.
+
+
+	*** Compiling the Compiler ***
+
+	------------------------------------------------------------
+	!!! This process is automated by the BIN/BUILD.SH script !!!
+	------------------------------------------------------------
+
+	First select a platform to compile for. The target files are
+	named TXname (the machine-specific T3X core module) and CGname
+	(the code generator). The target files for the Tcode/0 machine
+	can be found in the root directory of the T3X source code tree
+	and the other targets are in the "targets" directory.
+
+	Then there are two different emitters, one for direct output
+	of binary programs and one for source-to-source compilation.
+
+	To cross-compile the compiler for a system other than the
+	Tcode/0 virtual machine (TCVM), follow these steps:
+
+	1) Select an emitter: the DOS and CP/M ports need the binary
+	   emitter "txemtbin.t" and the Unix ports needs the source
+	   code emitter "txemtsrc.t". Link or copy the needed emitter
+	   to "txemit.t".
+
+	   E.g.: ln -fs txemtbin.t txemit.t
+
+	2) Link the file CGname to "cg.t". Leave "t3x.t" linked to the
+	   Tcode machine backend ("txtcvm.t").
+
+	   E.g.: ln -fs targets/cgcpmz80.t cg.t
+	         ln -fs txtcvm.t t3x.t  # this should not be necessary
+
+	3) Edit the file "cg.t" and change the value of the modpath()
+	   function to reflect your installation. Any trailing path
+	   seperators must be given (e.g. "lib/" instead of "lib").
+	   Note that a prefix of "" means leave the input file as is.
+	   On CP/M only drive letters (A:, etc) may be specified.
+
+	4) Compile the compiler. This step will create a TCVM binary
+	   "tx-name0" that generates output for the selected platform.
+
+	   E.g.: tcvm txtrn.tc txtrn tx-cpm0
+
+	5) Link the file TXname to "t3x.t".
+
+	   E.g.: ln -fs targets/txcpmz80.t t3x.t
+
+	6) Compile the compiler again, this time using the compiler
+	   created in the previous step. This step will create a binary
+	   for the selected platform.
+
+	   E.g.: tcvm tx-cpm0.tc txtrn tx-cpm
+
+	   In the example the final compiler will be named "tx-cpm.com".
+	   It will run on CP/M and generate native code for CP/M.
+
+	7) Remove the cross-compiler tx-name0.tc and reset "t3x.t" and
+	   "cg.t" to their TCVM targets, "txtcvm.t" and "cgtcvm.t".
+	   Also reset "txemit.t" to "txemitbin.t".
+
+	The resulting binary can then be used to compile T3X programs
+	(including the compiler itself) on the selected host platform.
+	All that is needed is the binary itself and the corresponding
+	TXname file (renamed "t3x.t"). It might be necessary to convert
+	the t3x.t file to local text file convention (e.g. on CP/M).
+
+	All ports that use the source code emitter (like the Unix ports)
+	emit assembly language, which must be further compiled and
+	linked with a system-specific assembler and linker. For the
+	FreeBSD-386 port, the resulting assembly language file can
+	simply be passed to the C compiler controller, cc. E.g.:
+
+	   tcvm tx-fbsd.tc txtrn tx-fbsd
+
+	will generate a file named "tx-fbsd.s", which can then be
+	compiled with cc:
+
+	   cc -m32 -o tx-fbsd tx-fbsd.s
+
+	(The -m32 option can/must be omitted on 32-bit machines.)
+
+	The portable Unix backend works in a similar way, but also needs
+	a runtime library. To finish compilation of the portable Unix
+	version of the compiler, run
+
+	   cc -m32 -o tx-unix tx-unix.s targets/ux386lib.c
+
+
+	*** Building other Cross Compilers ***
+
+	There is a total of 14 compilers that can be built from the
+	T3X/0 code: four host platforms and four target platforms make
+	a total of 16, but two combinations are not possible, because
+	the compiler would be too large to fit in the resulting binary.
+	These compilers exist:
+
+	Target --> TCVM        CP/M        DOS        Unix*
+	Host
+	----
+	TCVM       txtrn.tc    tx-cpm.tc   tx-dos.tc  tx-unix.tc
+
+	CP/M       tx-tcvm.com tx-cpm.com  tx-dos.com n/a
+
+	DOS        tx-tcvm.com tx-cpm.com  tx-dos.com n/a
+
+	Unix*      tx-tcvm     tx-cpm      tx-dos     tx-unix
+
+	* There is a FreeBSD backend named "fbsd" that can be used in
+	  the place of the "unix" backend on FreeBSD-386. It uses a
+	  runtime wrapper in assembly language instead of C. Note that
+	  this backend does NOT offer a T.BREAK procedure, though.
+
+	The BUILD.SH script in the "bin" directory can be used to
+	build any of the above compilers by just specifying the host
+	and target platforms as parameters. For instance,
+
+	$ bin/build.sh cpm dos
+
+	will generate an executable named "tx-dos.com" that will run
+	on CP/M and generate code for DOS. Note that the DOS compiler
+	for generating DOS output will have the same name, so when you
+	plan to build both, you will have to rename one of them.
+
+	Also note that when you have both a native compiler and a cross
+	compiler on CP/M, they will need different "t3x.t" files! It
+	is up to you to invent a workable solution.
+
+
+	*** Using the Cross Compilers ***
+
+	The "install" target in the Makefile will build native (cross)
+	compilers for all supported platforms. I.e. the compilers will
+	run on Unix-386 and emit code for the TCVM and for DOS-8086,
+	CP/M-Z80, and Unix-386 / FreeBSD-386.
+
+	The TX0 script will take care of all necessary steps during
+	compilation. For instance
+
+	$ tx0 foo
+
+	will compile foo.t to a Unix-386 executable named "foo", and
+
+	$ tx0 -t dos foo
+
+	will compile foo.t to a DOS-8086 executable named "foo.com".
+
+
+	*** Using the T3X/0 Compiler on DOS and CP/M ***
+
+	There are pre-compiled compilers for DOS and CP/M in the BIN
+	directory. To install a T3X/0 compiler on CP/M, copy the file
+	BIN/TX-CPM.COM to TX0.COM on your CP/M disk. Then convert the
+	file CG/TXCPMZ80.T to CP/M text file format and install it as
+	T3X.T on your CP/M disk. The program PROGRAMS/CPMFILE.T can be
+	used to convert the file.
+
+	$ tcvm txtrn.tc programs/cpmfile cpmfile
+	$ cp targets/txcpmz80.t t3x-cpm.t
+	$ tcvm cpmfile.tc t3x-cpm.t /R
+	$ # copy t3x-cpm.t to your CP/M system as T3X.T
+
+	To install the compiler on DOS, copy the file BIN/TX-DOS.COM
+	to TX0.COM on your DOS disk and install CG/TXDOS86C.T as T3X.T.
+	Conversion to DOS text file format is optional (it can be done
+	with the program PROGRAMS/DOSFILE.T).
+
+	If you want to bootstrap the compiler on CP/M, you will also
+	need the file CG/CGCPMZ80.T as CG.T, TXEMTBIN.T as TXEMIT.T,
+	and TXTRN.T. All these files have to be converted to CP/M text
+	file format.
+
+	On DOS you need CG/CGDOS86C.T as CG.T and TXEMTBIN.T as
+	TXEMIT.T as well as TXTRN.T. Conversion to DOS text format
+	is optional.
+
+	To compile the compiler on either system, run
+
+	TX0 TXTRN
+
+	which will result in a new compiler named TXTRN.COM. On CP/M
+	(@ 4MHz) this will take about 10 minutes. You can use the /V
+	option to entertain yourself while the compiler compiles.
+

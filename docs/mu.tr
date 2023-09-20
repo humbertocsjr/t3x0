@@ -1,0 +1,1055 @@
+.\" groff -me -ept mu.tr | sed -e 's/setpacking/& { 1 exch sub } settransfer /'
+.EQ
+delim $$
+define eval `= back 9 >`
+define corr `= hat`
+define md `~mod~`
+define div `~- back 40 up 5 : down 5 fwd 11 ~`
+.EN
+.de cb
+.in 0
+.nf
+.ft C
+.sp 0.5
+..
+.de ce
+.fi
+.ft P
+..
+.nr pp 13
+.nr sp 14
+.nr tp 14
+.nr fp 10
+.pl 11i
+.ll 7i
+.po 0.75i
+.he ''''
+.fo ''\- % \-''
+.(c
+.sz 15
+THE MU LANGUAGE FOR COMPUTATION THEORY
+.)c
+.(c
+.sz 13
+.sp 0.5
+Nils M Holm, Nov 2022
+.sp
+.)c
+.sh 1 Introduction
+.pp
+Mu is a simple language for performing computations using functions
+on natural numbers as well as functions of the $lambda$-calculus. It
+employs first-class functions, pattern matching,
+and a set of pre-defined functions that allow for a direct mapping of
+formulae from computation theory to Mu programs. In addition it provides
+tools for visualising the evaluation of expressions.
+.pp
+The motivation for the Mu language is to offer a simple and easily portable
+functional language whose notation closely resembles that of mathematics.
+There are, of course, languages like Scheme [Sus75] or SML [Mil97], which
+partially fulfill these requirements, but Scheme uses LISP-style syntax and
+SML and similar languages employ static typing, which precludes the type of
+parametric polymorphism that Mu provides.
+.sh 1 "Fundamental Concepts
+.pp
+.i Expressions
+in the Mu language are very similar to mathematical expressions and only
+a few operator symbols differ for technical reasons. For example:
+.EQ
+x+y*z lineup ~~corr~~ x+y cdot z
+.EN
+.sp -0.5
+.EQ
+""fwd 40 x~/~y-z lineup ~~corr~~ x div y - z
+.EN
+.sp -0.5
+.EQ
+y = f(g(x)) lineup ~~corr~~ y = f(g(x))
+.EN
+.sp -0.5
+.EQ
+x < f(x,y) lineup ~~corr~~ x < f(x,y)
+.EN
+.sp -0.5
+.EQ
+x md 2 lineup ~~corr~~ x md 2
+.EN
+.pp
+The usual precedence rules apply, so
+.EQ
+3*x + y~/~2 lineup ~~corr~~ (3*x) ~+~ (y~/~2 )
+.EN
+.pp
+The $=$ and $<$ operators have least precedence and the $md$ operator
+has the same precedence as $*$ and $/$. Parentheses can be used to
+make precedence explicit.
+.pp
+A function is
+.i defined
+using arrow notation:
+.EQ
+f(x) -> x cdot x.
+.EN
+Note that a dot is required to indicate the end of input. This dot is
+often omitted in this document, but still must
+be typed when entering code in the Mu interpreter. Also the symbol
+$cdot$ will often be used in the place of $*$ and $div$ will be used
+in the place of $~/~$ in this text.
+.pp
+After defining a function its name can be used to
+.i apply
+the function to some values:
+.EQ
+f(5)~~eval~~ 25
+.EN
+(The notation $a eval b$ means that the expression $a$ evaluates to
+the value $b$).
+.pp
+The notation $x'$ can be used to denote the
+.i successor
+($x+1$) of the value $x$, i.e. the successor function can be defined as
+follows:
+.EQ
+succ(x) -> x'
+.EN
+While the notation $x'$ is more succinct than $succ(x)$, the
+.i succ
+function, like all functions, is a
+.i value
+and can hence be passed to other functions.
+The successor notation can also be
+used with the
+.i "independent variable
+$x$ of a function, thereby effectively computing the
+.i predecessor
+$x$ of $x'$. The predecessor function can therefore be defined like this:
+.EQ
+pred(x') -> x
+.EN
+.pp
+Finally, functions may have multiple independent variables. E.g.:
+.EQ
+f(x,y,z) -> x cdot y + z
+.EN
+.sh 1 "Pattern Matching
+.pp
+Recursive function definitions often involve a trivial case where
+one or multiple variables of the function have a specific value.
+For example, the factorial function $fac$ (which computes the product
+of the numbers $1 ... x$) may be defined like this:
+.EQ
+fac(0) mark ~~->~~ 1
+.EN
+.sp -0.7
+.EQ
+fac(x') lineup ~~->~~ x' cdot fac(x)
+.EN
+This definition translates directly to the following Mu program:
+.EQ
+fac mark (0) ~~->~~ 1
+.EN
+.sp -0.7
+.EQ
+|~ lineup (x') ~~->~~ x' cdot fac(x)
+.EN
+.pp
+When a value is passed to the $fac$ function, it is first matched
+against $0$ and, if the values match, $fac$ takes $1$ as its
+result. Any other argument is matched by the second case of the
+function, because variables match any value (and thereby become
+associated with that value).
+.pp
+Patterns may contain both, variables and natural numbers. The following
+function returns $1$, if $x<y$, and $0$ otherwise:
+.EQ
+lt mark (0,0) ~~->~~ 0
+.EN
+.sp -0.7
+.EQ
+|~ lineup (0,x) ~~->~~ 1
+.EN
+.sp -0.7
+.EQ
+|~ lineup (x,0) ~~->~~ 0
+.EN
+.sp -0.7
+.EQ
+|~ lineup (x',y') ~~->~~ lt(x,y)
+.EN
+.pp
+Note the the order of cases matters. In the $lt$ function the pattern
+$(0,0)$ must come first, because it is most specific. The following two
+patterns would always match when then first one matches, so the pattern
+$(0,0)$ has to precede them. The final pattern contains only variables,
+so it always matches and has to come last. The order of the inner two
+patterns does not matter in this example.
+.pp
+Patterns must be exhaustive (it is an error for a function to run out
+of cases). This is most easily assured by making the last pattern in
+a function match anything (by containing only variables in it).
+.sh 1 "Conditional Expressions
+.pp
+Sometimes pattern matching is not sufficient to implement a function,
+because the condition upon which evaluation of a function depends is
+not an equality relation. For example, the $quot$ function,
+which computes the floored quotient $left floor x/y right floor$, may
+be defined in this way:
+.EQ
+quot(x,y) ~~->~~ left {
+lpile { 0 above 0 above { quot(x-y, y)' }}
+lpile { ~~ above ~~ above ~~ }
+lpile { {if~ y=0} above {if~ x<y} above {roman otherwise} }
+.EN
+.pp
+Because the condition $x<y$ cannot be expressed using pattern matching,
+a different mechanism has to be used when implementing this function in
+the Mu language:
+.EQ
+quot mark (x,0) -> 0
+.EN
+.sp -0.7
+.EQ
+|~ lineup (x,y) -> font CB [ x<y -> 0 ~:~ quot(x-y, y)' font CB ]
+.EN
+.pp
+.i "Conditional expressions
+of the form $font CB [ x -> y ~:~ z font CB ]$ first evaluate
+$x$ and, if its value is other than zero, they also evaluate $y$ and then
+$y$ will be the value of the entire expression. When $x$ is zero, $z$
+will evaluate and become the value of the expression.
+So the above $quot$ function returns $0$ when either $y=0$ or $x<y$.
+.pp
+The $z$ part of a conditional expression $font CB [ x -> y ~:~ z font CB ]$
+can be another condition, so any number of conditions can be contained in
+a single conditional expression. For example,
+.EQ
+font CB [ x sub 1 -> y sub 1 ~:~ x sub 2 -> y sub 2 ~:~ z font CB ]
+.EN
+means ``if $x sub 1$ then $y sub 1$ else if $x sub 2$ then $y sub 2$ else
+$z$''.
+.sh 1 "Polymorphism
+.pp
+There are two variants of the $mu$ operator, a bounded and an unbounded
+one. The bounded $mu$ operator is defined as follows:
+.EQ
+mu w sub w<z f ~~=~~ left {
+lpile { z above w above { mu w sub w'<z f } }
+lpile { ~~ above ~~ above ~~ }
+lpile { {if~ w >= z} above {if~ f(w) = 0} above {roman otherwise}}
+.EN
+and the unbounded one is defined like this:
+.EQ
+mu w f ~~=~~ left {
+lpile { w above { mu w' f } }
+lpile { ~~ above ~~ }
+lpile { {if~ f(w) = 0} above {roman otherwise}}
+.EN
+.pp
+These definitions map directly to the Mu functions
+.EQ
+mu(w,z,f) -> font CB [ mark z<w' -> z ~:~
+.EN
+.sp -0.7
+.EQ
+lineup f(w) = 0 -> w ~:~
+.EN
+.sp -0.7
+.EQ
+lineup mu(w',z,f) font CB ]
+.EN
+.pp
+and
+.EQ
+mu(w,f) -> font CB [ mark f(w) = 0 -> w ~:~
+.EN
+.sp -0.7
+.EQ
+lineup mu(w',f) font CB ]
+.EN
+.pp
+However, pattern matching in Mu is not restricted to patterns with the
+same number of elements, so a single,
+.i polymorphic
+$"mu"$
+.i function
+can be defined, which implements both the bounded and
+unbounded $mu$ operator (and also a single-argument variant of the
+operator):
+.EQ
+"mu" mark (f,w,z) -> font CB [ z<w' -> z ~:~
+f(w) = 0 -> w ~:~ mu(w',z,f) font CB ]
+.EN
+.sp -0.7
+.EQ
+|~ lineup (f,w) -> font CB [ f(w) = 0 -> w ~:~ mu(w',f) font CB ]
+.EN
+.sp -0.7
+.EQ
+|~ lineup (f) -> mu(0,f)
+.EN
+.sh 1 "First-Class Functions
+.pp
+Functions are first-class objects in Mu, so they can be passed to
+functions and returned by functions. The $mu$ operator from the previous
+section expects a function as its first parameter (and returns the smallest
+value $x$ for which the function takes 0 as its value):
+.EQ
+mu(fun(x) -> x < 25) ~~eval~~ 25
+.EN
+.pp
+An
+.i anonymous
+function is created by naming a function $fun$. Here is an anonymous
+.i identity
+function:
+.EQ
+fun(x) -> x ~~eval~~ function
+.EN
+The name $fun$ will not be
+associated with the function. There can be any number of functions
+named $fun$, which are all independent from each other.
+.pp
+Mu functions are lexically scoped, so they are equivalent to Scheme
+functions [Sus75] or the $lambda$\ abstractions of $lambda$-calculus
+[Chu41]. They can be used to implement all kinds of interesting things.
+Here is an implementation of LISP-style ordered tuples (``conses''): [McC60]
+.EQ
+T(x) mark -> fun(y) -> x
+.EN
+.sp -0.7
+.EQ
+F(x) lineup -> fun(y) -> y
+.EN
+.sp -0.7
+.EQ
+cons(x) lineup -> fun(y) -> fun(f) -> f(x)(y)
+.EN
+.sp -0.7
+.EQ
+first(p) lineup -> p(T)
+.EN
+.sp -0.7
+.EQ
+second(p) lineup -> p(F)
+.EN
+.pp
+In case you should prefer LISP syntax for working with $lambda$\ calculus
+(or functions in general), Mu can do that, too. All you have to do is
+type $lisp(1).$, and the interpreter will start accepting input using
+LISP syntax:
+.EQ
+(def~ mark T~ (fun~ (x)~ (fun~ (y)~ x)))
+.EN
+.sp -0.7
+.EQ
+(def~ lineup F~ (fun~ (x)~ (fun~ (y)~ y)))
+.EN
+.sp -0.7
+.EQ
+(def~ lineup cons~ (fun~ (x)~ (fun~ (y)~ (fun~ (f)~ ((f~ x)~ y)))))
+.EN
+.sp -0.7
+.EQ
+(def~ lineup first~ (fun~ (p)~ (p~ T)))
+.EN
+.sp -0.7
+.EQ
+(def~ lineup second~ (fun~ (p)~ (p~ F)))
+.EN
+.ce
+.pp
+Given these definitions\(dg (and using Mu syntax again):
+.(f
+\(dgAdding ``nil'' and ``null'' is left as an exercise to the reader.
+.)f
+.EQ
+first(cons(1)~(2)) mark ~~eval~~ 1
+.EN
+.sp -0.5
+.EQ
+second(cons(1)~(2)) lineup ~~eval~~ 2
+.EN
+.sp -0.5
+.EQ
+first(second(cons(cons(1)~(2))~(cons(3)~(4)))) ~~eval~~ 3
+.EN
+.pp
+In order to support basic $lambda$\ calculus operations, the Mu language
+does have the
+.i cn
+function, which generates the Church numeral corresponding to the given
+value, so that you can write
+$(cn ~ 5)$ instead of $fun(f) -> fun(x) -> f(f(f(f(f(x)))))$.
+Given the $lambda$\ calculus ``plus'' function
+.EQ
+plus == lambda m lambda n lambda f lambda x(mf(nfx))
+.EN
+or, in Mu notation
+.EQ
+mark plus(m) ->
+.EN
+.sp -0.7
+.EQ
+lineup "" fwd 100 fun(n) ->
+.EN
+.sp -0.7
+.EQ
+lineup "" fwd 200 fun(f) ->
+.EN
+.sp -0.7
+.EQ
+lineup "" fwd 300 (fun(x) -> m(f)~(n(f)~(x))
+.EN
+.sp 0.5
+you can then write
+.EQ
+plus(cn(5))~(cn(7))
+.EN
+to compute $5+7$ and
+.EQ
+plus(cn(5))~(cn(7))~(succ)~(0)
+.EN
+to convert the result to decimal notation.\(dd
+.(f
+\(ddwhere
+.i succ
+is the
+.i successor
+function, $fun(x) -> x'$, as described earlier
+.)f
+.pp
+.i "Recursive functions
+can be created either by associating them with a
+symbolic name using the $->$ operator, as done throughout this text,
+or by using the
+.i rec 
+operator, which turns an anonymous function into an anonymous recursive
+function. E.g.:
+.EQ
+rec("sum", fun(x,0) -> x ~|~ (x,y') -> "sum"(x,y)') ~~eval~~ function
+.EN
+.sp -0.5
+.EQ
+rec("sum", fun(x,0) -> x ~|~ (x,y') -> "sum"(x,y)')~(3,4) ~~eval~~ 7
+.EN
+.pp
+The first parameter of
+.i rec
+gives a name that the function uses internally to recurse. It is invisible
+outside of the function. The mechanism is similar to the
+.i label
+operator of early LISP. [McC62]
+.sh 1 "Tracing and Measuring
+.pp
+Sometimes it is interesting to see the values passed to a function as
+it recurses, how often it recurses, or what pattern the recursion follows.
+The Mu interpreter offers two functions for examing the evaluation of
+recursive functions.
+.pp
+The
+.i trace
+function will set up the interpreter to trace function application.
+For example, entering
+.EQ
+trace("sum").
+.EN
+will print all invokations of the
+.i sum
+function while it computes:
+.cb
+.in +1i
+sum(x,0) -> x | (x,y') -> sum(x,y)'.
+.sp 0.5
+trace(sum).
+.sp 0.5
+sum(3,4).
++ (fun:sum 3 4)
++  (fun:sum 3 3)
++   (fun:sum 3 2)
++    (fun:sum 3 1)
++     (fun:sum 3 0)
+.ce
+.pp
+(Note that trace output is always in LISP notation.)
+.pp
+When a numeric value is given to
+.i trace ,
+it will change the ``trace level''. When the trace level is set to one,
+not a specific function but all function applications will be traced.
+A trace level of two will print all built-in functions in addition. A
+trace level of zero will turn off tracing. Given the above
+.i sum
+function:
+.cb
+.in +1i
+trace(2).
+.sp 0.5
+sum(2,3).
++ (fun:sum 2 3)
++  (fun:sum 2 2)
++   (fun:sum 2 1)
++    (fun:sum 2 0)
++    (' 2)
++   (' 3)
++  (' 4)
+.ce
+.pp
+The indentation in the above example indicates the number of total
+recursive applications. Whenever
+.i sum
+applies itself, the indentation increases and each time it delivers
+a value, the indentation decreases.
+.pp
+The total number of function applications can be tracked using the
+.i count
+function.
+.cb
+.in +1i
+count(sum).
+sum(5,7).
++ count = 8
+.ce
+.sh 1 "Function and Operator Summaries
+.sh 2 Operators
+.pp
+The $->$
+operator associates a symbolic name with a value, where the value is
+typically a function, but can also be a number. Examples:
+.EQ
+id(x) -> x
+.EN
+.(c
+associates the name
+.i id
+with the identity function, and
+.)c
+.EQ
+mega -> exp(2,20)
+.EN
+.(c
+associates the name
+.i mega
+with the value $2 sup 20$.\(dg
+.(f
+\(dggiven the $"exp"$ function listed in the
+.i examples
+section.
+.)f
+.)c
+.pp
+The
+.i fun
+operator creates an anonymous function. The simplest form of the function is
+.EQ
+fun(v sub 1 , ... ) ->  expression
+.EN
+where each $v sub i$ is an independent variable of the function. When
+applying the function to values, each variable is associated with the
+corresponding value and then the expression (or
+.i term )
+of the function is computed, resulting in its value. E.g.:
+.EQ
+(fun(x) -> x cdot x)~( 5) ~~eval~~ 25
+.EN
+.pp
+The function may also have the form
+.EQ
+fun~ mark pattern sub 1 -> expr sub 1
+.EN
+.sp -0.8
+.EQ
+|~ lineup ...
+.EN
+.sp -0.8
+.EQ
+|~ lineup pattern sub n~ -> expr sub n
+.EN
+where each
+.i pattern
+is a parenthesized list of variables, but may also contain numbers.
+When applying a function using patterns to values, numbers in patterns
+must match corresponding values, while variables in patterns are associated
+with their corresponding values. E.g.:
+.EQ
+fun(0) -> 0 ~|~ (x) -> 1
+.EN
+implements the ``signum'' function, which returns $0$ for $0$ and $1$
+for any other value.
+Patterns are tried from left to right (or top to bottom). It is an error
+for a function to run out of patterns.
+.pp
+The
+.i conditional
+operator evaluates expressions conditionally:
+.EQ
+font CB [ x sub 1 -> y sub 1 ~:~ ... ~:~ x sub n -> y sub n ~:~ z font CB ]
+.EN
+.pp
+It first evaluates $x sub 1$ and, if it evaluates to a result
+other than $0$, it evaluates $y sub 1$, which is then
+the result of the entire expression. If $x sub 1 = 0$, the operator
+proceeds with the next $x sub i -> y sub i$ pair until it finds one
+with $x sub i != 0$. When none of the $x sub i$ is non-zero, the value
+of the conditional expression is $z$.
+.pp
+The
+.i rec
+operator creates a local association inside of an anonymous function
+that refers to the function itself, thereby allowing the function to
+.i recurse .
+E.g.:
+.EQ
+rec(fac, fun(0) -> 1 ~|~ (x') -> x' cdot fac(x))~(10) ~~eval~~ 3628800
+.EN
+.pp
+The first parameter of
+.i rec
+gives the name that the function uses internally to refer to itself, the
+second parameter specifies the function.
+.sh 2 "Arithmetic Functions
+.pp
+The $x'$ operator (pronounced
+.i prime
+or
+.i successor )
+adds one to its argument. E.g.
+.EQ
+0' mark ~~eval~~ 1
+.EN
+.sp -0.7
+.EQ
+2''' lineup ~~eval~~ 5
+.EN
+.pp
+Note that the successor operator will not work at the top level of the
+Mu interpreter
+.i "in LISP mode" ,
+where it always has to be part of some expression, e.g.\(dg
+.(f
+\(dgwhere $id(x) -> x$
+.)f
+.EQ
+(id~ 3') ~~eval~~ 4
+.EN
+.pp
+When used in a function pattern, the term $x'$
+will match the successor of $x$, so the variable $x$ will be associated
+with the
+.i predecessor
+of the argument:
+.EQ
+(fun(x') -> x)~(3) ~~eval~~ 2
+.EN
+.(c
+I.e.: if $x'=3$, then $x=2$.
+.)c
+.pp
+Note that the predecessor of $0$ is $0$.
+.pp
+The $x+y$ operator implements the $"sum"$ function, but more efficiently:
+.EQ
+"sum" mark (x,0) -> x
+.EN
+.sp -0.8
+.EQ
+|~ lineup (x,y') -> "sum"(x,y)'
+.EN
+.pp
+The $x-y$ operator implements the $"diff"$ (difference) function, but more
+efficiently:
+.EQ
+"diff" mark (x,0) -> x
+.EN
+.sp -0.8
+.EQ
+|~ lineup (x',y') -> "diff"(x,y)
+.EN
+.pp
+Note that $x-y$ really implements the modified difference $x - dot y$,
+where $x - dot y = 0$ if $y>x$.
+.pp
+The $x*y$ operator implements the $"prod"$ (product) function, but more
+efficiently:
+.EQ
+"prod" mark (x,0) -> 0
+.EN
+.sp -0.8
+.EQ
+|~ lineup (x,y') -> x + prod(x,y)
+.EN
+.pp
+The $x/y$ operator implements the
+.i quot
+(floored quotient) function, but more efficiently:
+.EQ
+quot mark (x,0) -> 0
+.EN
+.sp -0.8
+.EQ
+|~ lineup (x,y) -> font CB [ x<y -> 0 ~:~ quot(x-y, y)' font CB ]
+.EN
+.pp
+The $x md y$ (modulo) operator implements the
+.i rem
+(floored remainder) function, but more efficiently:
+.EQ
+rem mark (x,0) -> x
+.EN
+.sp -0.8
+.EQ
+|~ lineup (x,y) -> font CB [ x<y -> x ~:~ rem(x-y, y) font CB ]
+.EN
+.pp
+The $x<y$ (less-than) operator implements the
+.i lt
+function, but more efficiently:
+.EQ
+sg(0) mark -> 0 ~|~ (x) -> 1
+.EN
+.sp -0.5
+.EQ
+lt(x,y) lineup -> sg(y-x)
+.EN
+.pp
+The $x=y$ (equal) operator implements the
+.i eq
+function, but more efficiently:
+.EQ
+not(0) mark -> 1 ~|~ (x) -> 0
+.EN
+.sp -0.5
+.EQ
+eq(x,y) lineup -> not(x-y+(y-x))
+.EN
+.pp
+The
+.i cn
+function takes as its value the function that represents the
+.i "Church numeral
+of its argument. E.g., given $n$, it will return a function
+.EQ
+lambda f lambda x (f sup n x)
+.EN
+or, in Mu notation
+.EQ
+fun(f) -> fun(x) -> f sub 1 ( ~ ...~ f sub n  (x)~ ...)
+.EN
+.pp
+The inverse function of
+.i cn
+would be
+.i val ,
+which applies $f=succ$ $n$ times to $x=0$:
+.EQ
+val(c) -> c(fun(x) -> x')~(0)
+.EN
+.sh 2 "Utilities
+.pp
+A comment can be included in a Mu program by placing it between a
+semicolon and the end of a line:
+.cb
+.in +2i
+; this is a comment.
+.ce
+.pp
+The
+.i count
+function counts functions applications during evaluation. Every
+function specified in
+.EQ
+count(function sub 1 ... )
+.EN
+will be counted and a total will print at the end of evaluation. Specifying
+no functions at all will disable counting.
+.pp
+The variable
+.i it
+is always associated with the result most recently printed by the
+evaluator. For example, running
+.EQ
+rec(fac, fun(0) -> 1 ~|~ (x') -> x' cdot fac(x))~(100)
+.EN
+will compute the factorial of 100, and subsequently running
+.EQ
+lg(10,it)'
+.EN
+will print the number of digits in the result.\(dg
+.(f
+\(dggiven the logarithm function $lg$ listed in the
+.i examples
+section.
+.)f
+.pp
+The
+.i lisp
+function will enable LISP syntax. $lisp(1)$ will make the Mu
+interpreter accept input in LISP notation and $lisp(0)$ will
+make it accept the Mu notation as used in this text. $lisp(2)$
+is like $lisp(0)$, but in addition will print the LISP forms
+corresponding to the interpreter's input.
+.pp
+The
+.i print
+function will print the values of all expressions passed to it and
+return the last one. E.g.:
+.EQ
+print(1,2,3,4,5) ~~eval~~ 5
+.EN
+will print the numbers $1$ through $5$, separated by blanks, and
+advance to the beginning of the next line.
+.pp
+The
+.i tco
+function will turn
+.i "tail call optimization
+on or off: $tco(0)$ will disable TCO and any other argument
+will enable it. By default the Mu interpreter will perform TCO, but
+this can be confusing in
+.i trace
+output.
+.pp
+With TCO enabled,
+.i tail-recursive
+functions will evaluate in constant space. E.g.
+.EQ
+(fun(f) -> f(f))~(fun(f) -> f(f))
+.EN
+will run forever. Without TCO it will exhaust available memory quickly.
+.pp 
+The
+.i trace
+function enables function tracing. When a list of functions is passed
+to it, it will print applications of the listed functions during
+evaluation. When $1$ is passed to it, it will trace all user-defined
+functions, when $2$ is passed to it, it will also trace built-in
+functions (like $+$, $div$, etc). Passing $0$ to
+.i trace
+will turn off tracing. Indentation in trace output reflects the total
+number of recursive function applications at a given point of the
+computation.
+.sh 1 Examples
+.EQ
+id(x) -> x
+.EN
+.sp -0.2
+.EQ
+zero(x) -> 0
+.EN
+.sp -0.5
+.EQ
+succ(x) -> x'
+.EN
+.sp -0.5
+.EQ
+pred(x') -> x
+.EN
+.sp -0.2
+.EQ
+eq mark (0,0) -> 1
+.EN
+.sp -0.7
+.EQ
+|~ lineup (0,x) -> 0
+.EN
+.sp -0.7
+.EQ
+|~ lineup (x,0) -> 0
+.EN
+.sp -0.7
+.EQ
+|~ lineup (x',y') -> eq(x,y)
+.EN
+.sp -0.2
+.EQ
+sg(0) -> 0 ~|~ (x) -> 1
+.EN
+.sp -0.2
+.EQ
+and(x,y) -> sg(x cdot y)
+.EN
+.sp -0.2
+.EQ
+or(x,y) -> sg(x+y)
+.EN
+.sp -0.2
+.EQ
+exp mark (x,0) -> 1
+.EN
+.sp -0.7
+.EQ
+|~ lineup (x,y') -> x cdot exp(x,y)
+.EN
+.sp -0.2
+.EQ
+mu mark (f,w,z) -> font CB [ z<w' -> z ~:~
+f(w) = 0 -> w ~:~ mu (w',z,f) font CB ]
+.EN
+.sp -0.7
+.EQ
+|~ lineup (f,w) -> font CB [ f(w) = 0 -> w ~:~ mu (w',f) font CB ]
+.EN
+.sp -0.7
+.EQ
+|~ lineup (f) -> mu (0,f)
+.EN
+.sp -0.2
+.EQ
+not(0) -> 1 ~|~ (x) -> 0
+.EN
+.sp -0.2
+.EQ
+min(w,f) -> mu (0,w,fun(x) -> not(f(x)))
+.EN
+.sp -0.2
+.EQ
+sqrt(x) -> pred(min(fun(y) -> x<y cdot y,x))
+.EN
+.sp -0.2
+.EQ
+lo(x,y) mark -> pred( mu (fun(z) -> not(y md exp(x,z))))
+.EN
+.sp -0.2
+.EQ
+lg(x,y) lineup -> pred( mu (fun(z) -> not(y < exp(x,z))))
+.EN
+.sp 0.2
+.(c
+; alternative version:
+.)c
+.sp -0.2
+.EQ
+lg mark
+(x,z,y,n) -> font CB [ y<z -> n ~:~ lg(x,x cdot z,y, n') font CB ]
+.EN
+.sp -0.7
+.EQ
+|~ lineup
+(x,y) -> font CB [ x<2 -> 0 ~:~ y=0 -> 0 ~:~ pred(lg(x,1,y,0)) font CB ]
+.EN
+.sp -0.2
+.EQ
+hyper mark (0,x,y) -> y'
+.EN
+.sp -0.7
+.EQ
+|~ lineup (1,x,y) -> x+y
+.EN
+.sp -0.7
+.EQ
+|~ lineup (2,x,y) -> x cdot y
+.EN
+.sp -0.7
+.EQ
+|~ lineup (n,x,0) -> 1
+.EN
+.sp -0.7
+.EQ
+|~ lineup (n',x,y') -> hyper(n,x,hyper(n',x,y))
+.EN
+.sp -0.2
+.EQ
+ack mark (0,y) -> y'
+.EN
+.sp -0.7
+.EQ
+|~ lineup (x',0) -> ack(x,1)
+.EN
+.sp -0.7
+.EQ
+|~ lineup (x',y') -> ack(x,ack(x',y))
+.EN
+.sp 0.5
+.EQ
+gcd (x,0) -> 0
+.EN
+.sp -0.7
+.EQ
+"" fwd 950 |~ (x,y) -> font CB [ mark x<y -> gcd(y,x) ~:~
+.EN
+.sp -0.7
+.EQ
+lineup not(x md y) -> y ~:~
+.EN
+.sp -0.7
+.EQ
+lineup gcd(x,x md y) font CB ]
+.EN
+.sp -0.2
+.EQ
+lcm(x,y) -> x cdot y ~/~ gcd(x,y)
+.EN
+.sp -0,2
+.EQ
+phi mark (r,x,0) -> r(x,0)
+.EN
+.sp -0.7
+.EQ
+|~ lineup (r,x,y') -> font CB [ r(x,y') -> phi (r,x,y)' ~:~
+phi (r,x,y) font CB ]
+.EN
+.sp -0.7
+.EQ
+|~ lineup (r,x) -> phi (r,x,pred(x))
+.EN
+.sp 0.5
+.EQ
+"prime" mark (x,0) -> 0
+.EN
+.sp -0.7
+.EQ
+|~ lineup (x,2) -> 1
+.EN
+.sp -0.7
+.EQ
+|~ lineup (x,y') -> font CB [ x md y = 0 -> 0 ~:~ prime(x,y) font CB ]
+.EN
+.sp -0.7
+.EQ
+|~ lineup (x) -> prime(x,x)
+.EN
+.sp 0.2
+.(c
+; alternative version:
+.)c
+.sp -0.2
+.EQ
+prime(x) -> (fun(w) -> w = mu (2,w,fun(z) -> x md z))~(sqrt(x)')
+.EN
+.sp -0.2
+.EQ
+pi mark (x,y') -> font CB [ prime(x) -> font CB [ y -> pi (x'',y) ~:~
+x font CB ] ~:~ pi (x'',y') font CB ]
+.EN
+.sp -0.7
+.EQ
+|~ lineup (0) -> 2
+.EN
+.sp -0.7
+.EQ
+|~ lineup (x) -> pi (3,x)
+.EN
+.ce
+.sh 1 References
+.sp 0.5
+[Chu41] Alonzo Church;      
+``The Calculi of Lambda Conversion'';
+Princeton Univ. Press, 1941
+.sp 0.5
+[McC60] John McCarthy;      
+``Recursive Functions of Symbolic Expressions and Their Computation by
+Machine, Part I'';
+Communications of the ACM, Vol. 3, No. 4, 1960, pp. 184-195.
+.sp 0.5
+[McC62] John McCarthy, et al.;
+``LISP 1.5 Programmer's Manual'';
+MIT Press, 1962
+.sp 0.5
+[Mil97] Robin Milner, et al.;
+``The Definition of Standard ML'';
+MIT Press 1997
+.sp 0.5
+[Sus75] Gerald Jay Sussman, Guy Lewis Steele, Jr.;
+``SCHEME \- an Interpreter for Extended Lambda Calculus'';
+AI Memo No. 349;
+Massachusetts Institute of Technology, AI Lab., 1975
+
