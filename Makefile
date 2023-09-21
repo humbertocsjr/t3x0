@@ -2,7 +2,7 @@
 # Nils M Holm, 2022
 # Public domain / 0BSD license
 
-V=6
+V=6ee
 
 # Where to keep the T3X libraries
 #
@@ -10,7 +10,7 @@ T3XDIR=	/usr/local/t3x/0
 
 # Where the binaries go
 #
-BINDIR=	/u/bin
+BINDIR=	/usr/bin
 
 HOST=	unix
 

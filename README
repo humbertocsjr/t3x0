@@ -1,9 +1,12 @@
 
-	T3X/0 - A New T3X Compiler
+	T3X/0 Extended Edition - A New T3X Compiler
+	===========================================
 
 	T3X is a family of small, portable, procedural, block-structured,
 	recursive, and almost typeless programming languages. The T3X
 	syntax is similar to Pascal, its semantics resembles BCPL's.
+
+	This Edition includes new commands and operations aliases.
 
 	T3X/0 is the latest member of the T3X family. Its design is
 	based on the experience made with its predecessors. It is
